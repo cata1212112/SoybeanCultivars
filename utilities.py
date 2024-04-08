@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import KFold
 
 
 def clip_outliers(dataframe):
@@ -14,3 +15,10 @@ def clip_outliers(dataframe):
         dataframe[col] = dataframe[col].clip(lower_bound, upper_bound)
 
     return dataframe
+
+
+def get_kfold(dataframe):
+    kf = KFold(n_splits=10, random_state=7, shuffle=True)
+
+    for i, (train_index, test_index) in enumerate(kf.split(dataframe)):
+        yield train_index, test_index
