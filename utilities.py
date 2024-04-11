@@ -22,6 +22,16 @@ class SoyBeanDataset(Dataset):
     def __getitem__(self, idx):
         return torch.tensor(self.X[idx], dtype=torch.float), torch.tensor(self.y[idx], dtype=torch.float)
 
+class VAEDataset(Dataset):
+    def __init__(self, X):
+        super(VAEDataset, self).__init__()
+        self.X = X
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return torch.tensor(self.X[idx], dtype=torch.float)
 
 def clip_outliers(dataframe):
     float_columns = dataframe.select_dtypes(include='float64')
@@ -90,6 +100,28 @@ def train(model, EPOCHS, criterion, optimizer, X_train, y_train, X_val, y_val):
 
     return train_losses, val_losses
 
+def train_vae(model, X, criterion, optimizer, EPOCHS):
+    model.train()
+    loader = DataLoader(dataset=VAEDataset(X), batch_size=32, shuffle=True)
+    all_losses = []
+    for epoch in range(EPOCHS):
+        running_loss = 0.0
+        for input in loader:
+            input = input.to(device)
+            reconstructed, mu, logvar = model(input)
+            loss = criterion(reconstructed, input, mu, logvar)
+            running_loss += loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        all_losses.append(running_loss / len(loader))
+
+    return all_losses
+
+def generate_data(model):
+    z = torch.randn(4, 32).to(device)
+    return model.decoder(z).cpu().numpy()
 
 def permutation_feature_importance(model, X, y, criterion, n_repeats=100):
     X = X.to_numpy()
@@ -107,4 +139,23 @@ def permutation_feature_importance(model, X, y, criterion, n_repeats=100):
         importances.append(np.mean(scores) - baseline_error)
 
     return importances
+
+
+def gradient_feature_importance(model, X):
+    model.eval()
+    output = model(X)
+    gradients = torch.autograd.grad(output, X, torch.ones_like(output))[0]
+
+    feature_importance = torch.mean(torch.abs(gradients), dim = 0).cpu().detach().numpy()
+    return feature_importance
+
+def weigths_feature_importance(model):
+    model.eval()
+    weigths = []
+    for param in model.parameters():
+        weigths.append(param.data.cpu().numpy())
+
+    feature_importance = np.sum(np.abs(weigths[0]), axis = 1)
+    return feature_importance
+
 #%%
